@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Claude Rate Limits",
+  "version": "0.1.0",
+  "description": "Shows your Claude subscription 5-hour, 7-day, and Fable usage limits in the toolbar. Click to refresh.",
+  "permissions": ["alarms", "storage", "idle"],
+  "host_permissions": ["https://claude.ai/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Claude Rate Limits - loading..."
+  }
+}
