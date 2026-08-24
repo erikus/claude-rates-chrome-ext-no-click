@@ -55,7 +55,7 @@ const BUCKET_FABLE = {
 };
 const BUCKETS = [BUCKET_FIVE_HOUR, BUCKET_SEVEN_DAY, BUCKET_FABLE];
 /** Which bucket's utilization goes in the badge text. */
-const BADGE_BUCKET = BUCKET_FIVE_HOUR;
+const BADGE_BUCKET = BUCKET_FABLE;
 
 /** Utilization thresholds (percent) for color coding. */
 const UTIL_WARN_PERCENT = 50;
