@@ -1,8 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Claude Rate Limits",
+  "name": "Rate Limits for Claude",
   "version": "0.1.0",
-  "description": "Shows your Claude subscription 5-hour, 7-day, and Fable usage limits in the toolbar. Click to refresh.",
+  "description": "Unofficial. Your Claude subscription 5-hour, 7-day, and Fable usage as toolbar bars colored by pace. Not affiliated with Anthropic.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": ["alarms", "storage", "idle"],
   "host_permissions": ["https://claude.ai/*"],
   "background": {
@@ -10,6 +15,6 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Claude Rate Limits - loading..."
+    "default_title": "Rate Limits for Claude - loading..."
   }
 }

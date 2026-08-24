@@ -1,4 +1,4 @@
-// Claude Rate Limits - MV3 service worker.
+// Rate Limits for Claude - MV3 service worker.
 //
 // Fetches subscription usage from claude.ai's internal usage endpoint (using
 // the logged-in session cookie) and renders it into the toolbar action:
@@ -466,7 +466,7 @@ function formatBucketLine(bucket, now) {
 }
 
 function buildTitle(state, buckets, now) {
-  const lines = ["Claude Rate Limits"];
+  const lines = ["Rate Limits for Claude"];
   for (const b of buckets) lines.push(formatBucketLine(b, now));
   // Any limits[] entries not covered by the buckets above (e.g. other scoped models).
   const shownLimits = new Set(buckets.map((b) => b.limit).filter((l) => l !== null));
