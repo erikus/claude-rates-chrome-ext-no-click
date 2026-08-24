@@ -1,8 +1,8 @@
 # claude-rates-chrome-ext-no-click
 
 Chrome extension that shows your Claude subscription rate limits in the
-toolbar **without clicking**: the icon is three bars (5-hour, 7-day, Fable),
-the badge is the Fable weekly utilization %, and hovering shows all buckets
+toolbar **without clicking**: the icon is three bars (5-hour, 7-day, Fable)
+on a background tinted with Fable's pace color, and hovering shows all buckets
 with pace and reset times.
 
 - **Click** the icon to refresh immediately.
@@ -12,12 +12,12 @@ with pace and reset times.
 It reads `https://claude.ai/api/organizations/{orgId}/usage` (the `limits[]`
 array: `session`, `weekly_all`, and the `weekly_scoped` entry for Fable) using
 your existing claude.ai login cookie - an unofficial internal endpoint that may
-change. If the badge shows `!`, hover for the error (usually "not logged in").
+change. If the bars stay grey, hover for the error (usually "not logged in").
 
 ## Colors mean pace, not level
 
-The goal is to end each week having used the whole weekly quota, so bar and
-badge colors compare what you have used with what you *would* have used at a
+The goal is to end each week having used the whole weekly quota, so bar
+colors compare what you have used with what you *would* have used at a
 steady rate across the window (window start = `resets_at` minus 7 days or
 5 hours):
 
@@ -33,8 +33,10 @@ The 5-hour bucket is never flagged for under-use; only for going too fast.
 If a bucket has no usable `resets_at`, plain level thresholds (50% / 80%) are
 used instead. Thresholds are constants at the top of `background.js`.
 
-The bars only occupy the top 7/16 of the icon because Chrome paints the badge
-over the bottom of the icon; fills drawn there are invisible.
+The Fable bar is the emphasized one: it gets any leftover horizontal pixels
+(so it is slightly wider at sizes where the width does not divide evenly), and
+the icon background is a translucent version of its pace color. No badge is
+used because Chrome paints it over the bottom of the icon, hiding the bars.
 
 ## Load it
 
@@ -63,5 +65,5 @@ force-installed by enterprise policy. Realistic options:
 - `manifest.json` - MV3 manifest (permissions: `alarms`, `storage`, `idle`;
   host access to `claude.ai`).
 - `background.js` - service worker: fetch, refresh policy, pace computation,
-  icon/badge/tooltip rendering. Tunables (refresh interval, idle threshold,
-  pace thresholds, which bucket goes in the badge) are constants at the top.
+  icon/tooltip rendering. Tunables (refresh interval, idle threshold,
+  pace thresholds, which bucket is emphasized) are constants at the top.

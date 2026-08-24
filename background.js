@@ -2,8 +2,8 @@
 //
 // Fetches subscription usage from claude.ai's internal usage endpoint (using
 // the logged-in session cookie) and renders it into the toolbar action:
-//   - icon:    three bars (5h / 7d / Fable), colored by pace
-//   - badge:   the Fable utilization percentage, colored by pace
+//   - icon:    three bars (5h / 7d / Fable), colored by pace, on a
+//              translucent background in Fable's pace color
 //   - tooltip: all buckets with pace, reset times and last-refresh time
 //
 // "Pace" compares actual utilization with the utilization you would have if
@@ -74,8 +74,10 @@ const BUCKET_FABLE = {
   flagUnderuse: true,
 };
 const BUCKETS = [BUCKET_FIVE_HOUR, BUCKET_SEVEN_DAY, BUCKET_FABLE];
-/** Which bucket's utilization goes in the badge text. */
-const BADGE_BUCKET = BUCKET_FABLE;
+/** The bucket that gets visual emphasis in the icon: it absorbs any leftover
+ *  horizontal pixels (so its bar is slightly wider when the size allows) and
+ *  its pace color tints the icon background. */
+const EMPHASIZED_BUCKET = BUCKET_FABLE;
 
 /** Pace status of a bucket. */
 const PACE_UNKNOWN = "unknown";
@@ -106,17 +108,20 @@ const COLOR_CRITICAL = "#d0342c";
 const COLOR_UNKNOWN = "#9a9a9a";
 /** Empty part of a bar. Translucent so it reads on light and dark toolbars. */
 const COLOR_TRACK = "rgba(128, 128, 128, 0.35)";
-const COLOR_ERROR_BADGE = "#d0342c";
-const COLOR_STALE_BADGE = "#6b6b6b";
 
 const ICON_SIZES = [16, 32];
+/** The icon size, in pixels, at which 1 px = 1 DIP. Pixel measurements
+ *  below are given in DIP and scaled by size / ICON_BASE_SIZE. */
+const ICON_BASE_SIZE = 16;
+/** Left empty at the bottom so the icon sits level with other toolbar icons. */
+const ICON_BOTTOM_INSET_DIP = 1;
+const ICON_CORNER_RADIUS_DIP = 1;
 /** Icon geometry, expressed as fractions of the icon size. */
 const ICON_BAR_GAP_FRACTION = 0.1;
 const ICON_MIN_FILL_FRACTION = 0.08;
-/** Chrome paints the badge (plus a 1-DIP outline) over the bottom 9 of the
- *  16 DIP of the icon, so only the top 7/16 is ever visible while a badge
- *  is shown. Bars are drawn inside that band. */
-const ICON_VISIBLE_HEIGHT_FRACTION = 16 / 16;
+/** Opacity of the icon background, which is tinted with the emphasized
+ *  bucket's pace color. */
+const ICON_BACKGROUND_ALPHA = 0.25;
 
 const STORAGE_KEY = "state";
 
@@ -364,20 +369,42 @@ function colorForBucket(bucket) {
   }
 }
 
-/** Draws three vertical bars into an ImageData of the given size. */
-function drawIcon(size, buckets) {
+/** "#rrggbb" -> "rgba(r, g, b, alpha)". */
+function withAlpha(hexColor, alpha) {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hexColor);
+  if (match === null) throw new Error(`Expected #rrggbb color, got ${hexColor}`);
+  const [r, g, b] = match.slice(1).map((h) => parseInt(h, 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** Draws one vertical bar per bucket into an ImageData of the given size,
+ *  over a background tinted with the emphasized bucket's pace color. Bars
+ *  share the width evenly; any leftover pixels widen the emphasized bar. */
+function drawIcon(size, buckets, emphasizedIndex) {
   const canvas = new OffscreenCanvas(size, size);
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, size, size);
 
-  const gap = Math.max(1, Math.round(size * ICON_BAR_GAP_FRACTION));
-  const barWidth = Math.floor((size - gap * (buckets.length - 1)) / buckets.length);
-  const totalWidth = barWidth * buckets.length + gap * (buckets.length - 1);
-  const xStart = Math.floor((size - totalWidth) / 2);
-  const barHeight = Math.max(1, Math.floor(size * ICON_VISIBLE_HEIGHT_FRACTION));
+  const dip = size / ICON_BASE_SIZE;
+  const barHeight = size - Math.round(ICON_BOTTOM_INSET_DIP * dip);
+  const cornerRadius = ICON_CORNER_RADIUS_DIP * dip;
 
+  // Everything (background and bars) is clipped to a rounded rectangle.
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, barHeight, cornerRadius);
+  ctx.clip();
+
+  ctx.fillStyle = withAlpha(colorForBucket(buckets[emphasizedIndex]), ICON_BACKGROUND_ALPHA);
+  ctx.fillRect(0, 0, size, barHeight);
+
+  const gap = Math.max(1, Math.round(size * ICON_BAR_GAP_FRACTION));
+  const baseWidth = Math.floor((size - gap * (buckets.length - 1)) / buckets.length);
+  const leftover = size - (baseWidth * buckets.length + gap * (buckets.length - 1));
+  const barWidths = buckets.map((_, i) => baseWidth + (i === emphasizedIndex ? leftover : 0));
+
+  let x = 0;
   buckets.forEach((bucket, i) => {
-    const x = xStart + i * (barWidth + gap);
+    const barWidth = barWidths[i];
     ctx.fillStyle = COLOR_TRACK;
     ctx.fillRect(x, 0, barWidth, barHeight);
 
@@ -388,6 +415,8 @@ function drawIcon(size, buckets) {
     const fillHeight = Math.max(1, Math.round(barHeight * fraction));
     ctx.fillStyle = colorForBucket(bucket);
     ctx.fillRect(x, barHeight - fillHeight, barWidth, fillHeight);
+
+    x += barWidth + gap;
   });
 
   return ctx.getImageData(0, 0, size, size);
@@ -459,18 +488,13 @@ async function render(state) {
   const now = Date.now();
   const buckets = BUCKETS.map((spec) => resolveBucket(state.usage, spec, now));
 
-  const imageData = {};
-  for (const size of ICON_SIZES) imageData[size] = drawIcon(size, buckets);
-  await chrome.action.setIcon({ imageData });
+  const emphasizedIndex = BUCKETS.indexOf(EMPHASIZED_BUCKET);
 
-  //const badgeBucket = buckets[BUCKETS.indexOf(BADGE_BUCKET)];
-  //await chrome.action.setBadgeBackgroundColor({color: [0, 0, 0, 0]});
-  //if (state.lastError !== null && state.usage === null) {
-  //  await chrome.action.setBadgeText({ text: "!" });
-  //} else {
-  //  await chrome.action.setBadgeText({ text: formatPercent(badgeBucket.utilization) });
-  //}
-  //await chrome.action.setBadgeTextColor({ color: "#000000" });
+  const imageData = {};
+  for (const size of ICON_SIZES) {
+    imageData[size] = drawIcon(size, buckets, emphasizedIndex);
+  }
+  await chrome.action.setIcon({ imageData });
   await chrome.action.setTitle({ title: buildTitle(state, buckets, now) });
 }
 
