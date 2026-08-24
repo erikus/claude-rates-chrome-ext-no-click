@@ -1,0 +1,1 @@
+# claude-rates-chrome-ext-no-click
