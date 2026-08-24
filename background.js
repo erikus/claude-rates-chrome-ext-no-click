@@ -116,7 +116,7 @@ const ICON_MIN_FILL_FRACTION = 0.08;
 /** Chrome paints the badge (plus a 1-DIP outline) over the bottom 9 of the
  *  16 DIP of the icon, so only the top 7/16 is ever visible while a badge
  *  is shown. Bars are drawn inside that band. */
-const ICON_VISIBLE_HEIGHT_FRACTION = 7 / 16;
+const ICON_VISIBLE_HEIGHT_FRACTION = 16 / 16;
 
 const STORAGE_KEY = "state";
 
@@ -463,17 +463,14 @@ async function render(state) {
   for (const size of ICON_SIZES) imageData[size] = drawIcon(size, buckets);
   await chrome.action.setIcon({ imageData });
 
-  const badgeBucket = buckets[BUCKETS.indexOf(BADGE_BUCKET)];
-  if (state.lastError !== null && state.usage === null) {
-    await chrome.action.setBadgeText({ text: "!" });
-    await chrome.action.setBadgeBackgroundColor({ color: COLOR_ERROR_BADGE });
-  } else {
-    await chrome.action.setBadgeText({ text: formatPercent(badgeBucket.utilization) });
-    await chrome.action.setBadgeBackgroundColor({
-      color: state.lastError !== null ? COLOR_STALE_BADGE : colorForBucket(badgeBucket),
-    });
-  }
-  await chrome.action.setBadgeTextColor({ color: "#ffffff" });
+  //const badgeBucket = buckets[BUCKETS.indexOf(BADGE_BUCKET)];
+  //await chrome.action.setBadgeBackgroundColor({color: [0, 0, 0, 0]});
+  //if (state.lastError !== null && state.usage === null) {
+  //  await chrome.action.setBadgeText({ text: "!" });
+  //} else {
+  //  await chrome.action.setBadgeText({ text: formatPercent(badgeBucket.utilization) });
+  //}
+  //await chrome.action.setBadgeTextColor({ color: "#000000" });
   await chrome.action.setTitle({ title: buildTitle(state, buckets, now) });
 }
 
