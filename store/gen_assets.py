@@ -1,6 +1,11 @@
 # Generates the static Web Store assets:
-#   icons/icon{16,48,128}.png       - manifest icons (also the store icon)
-#   store/screenshot-1280x800.png   - store listing screenshot
+#   icons/icon{16,48}.png   - manifest icons, full-bleed like the runtime icon
+#   icons/icon128.png       - manifest + store icon: 96x96 artwork centered in
+#                             a 128x128 canvas with 16 px transparent padding,
+#                             per the Web Store icon guidelines
+#   store/screenshot-*.png  - store listing screenshots (1280x800), made by
+#                             centering real screenshots from store/src/ on a
+#                             neutral background
 #
 # Run from the repo root:  uv run --with pillow store/gen_assets.py
 #
@@ -9,11 +14,12 @@
 
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 REPO = Path(__file__).resolve().parent.parent
 ICONS_DIR = REPO / "icons"
 STORE_DIR = REPO / "store"
+SRC_DIR = STORE_DIR / "src"
 
 # --- Geometry, mirrored from background.js ---------------------------------
 ICON_BASE_SIZE = 16
@@ -29,40 +35,46 @@ COLOR_UNDER_PACE = (0x3B, 0x82, 0xF6)
 COLOR_OVER_PACE = (0xD9, 0xA4, 0x00)
 COLOR_TRACK = (128, 128, 128, int(0.35 * 255))
 
-# --- Sample data -----------------------------------------------------------
-# Manifest/store icon: everything on pace.
-ICON_SAMPLE = [(30, COLOR_ON_PACE), (45, COLOR_ON_PACE), (60, COLOR_ON_PACE)]
-# Screenshot: one bucket per color so the pace idea is visible.
-SHOT_SAMPLE = [(12, COLOR_ON_PACE), (22, COLOR_UNDER_PACE), (58, COLOR_OVER_PACE)]
-SHOT_TOOLTIP = [
-    "Rate Limits for Claude",
-    "5h: 12% (resets in 3h 13m)",
-    "7d: 22% (17 pts under pace, 39% expected; resets in 4d 6h)",
-    "Fable: 58% (19 pts over pace, 39% expected; resets in 4d 6h)",
-    "Updated 12m ago",
-    "Blue = under pace, green = on pace, amber/red = over pace",
-    "Click to refresh",
-]
+# --- Store icon ------------------------------------------------------------
+STORE_ICON_CANVAS = 128
+STORE_ICON_ARTWORK = 96
+STORE_ICON_PADDING = (STORE_ICON_CANVAS - STORE_ICON_ARTWORK) // 2
+FULL_BLEED_ICON_SIZES = (16, 48)
+# One bucket per pace color: 5h on pace (green), 7d under (blue), Fable over
+# (amber). The background tint follows the emphasized (Fable) bucket.
+ICON_SAMPLE = [(30, COLOR_ON_PACE), (45, COLOR_UNDER_PACE), (70, COLOR_OVER_PACE)]
 
-# --- Screenshot layout -----------------------------------------------------
+# --- Screenshots -----------------------------------------------------------
 SHOT_SIZE = (1280, 800)
 SHOT_BG = (0xF4, 0xF4, 0xF5)
-TOOLBAR_BG = (0xFF, 0xFF, 0xFF)
-TOOLBAR_BORDER = (0xDA, 0xDA, 0xDA)
-TOOLTIP_BG = (0xF0, 0xF0, 0xF0)
-TOOLTIP_BORDER = (0xB0, 0xB0, 0xB0)
-TEXT_DARK = (0x20, 0x20, 0x20)
-TEXT_MUTED = (0x60, 0x60, 0x60)
-ICON_RENDER_SIZE = 192
-FONT_PATH = "/System/Library/Fonts/Helvetica.ttc"
+SHOT_BORDER = (0xC8, 0xC8, 0xC8)
+# (source in store/src, output name, scale factor, resampling filter).
+# Scale factors are integers so pixels stay crisp; NEAREST for the tiny icon
+# crop, LANCZOS for the text-heavy tooltip.
+SCREENSHOTS = [
+    ("tooltip.png", "screenshot-1-tooltip-1280x800.png", 2, Image.Resampling.LANCZOS),
+    ("icon.png", "screenshot-2-icon-1280x800.png", 12, Image.Resampling.NEAREST),
+]
 
 
 def with_alpha(rgb, alpha):
     return (*rgb, int(round(alpha * 255)))
 
 
+def _multiply_alpha(alpha, mask):
+    out = Image.new("L", alpha.size)
+    a = alpha.load()
+    m = mask.load()
+    o = out.load()
+    w, h = alpha.size
+    for y in range(h):
+        for x in range(w):
+            o[x, y] = a[x, y] * m[x, y] // 255
+    return out
+
+
 def draw_icon(size, buckets, emphasized_index):
-    """buckets: list of (utilization_percent, fill_rgb)."""
+    """buckets: list of (utilization_percent, fill_rgb). Returns RGBA size x size."""
     dip = size / ICON_BASE_SIZE
     bar_height = size - round(ICON_BOTTOM_INSET_DIP * dip)
     radius = ICON_CORNER_RADIUS_DIP * dip
@@ -100,92 +112,38 @@ def draw_icon(size, buckets, emphasized_index):
     return layer
 
 
-def _multiply_alpha(alpha, mask):
-    out = Image.new("L", alpha.size)
-    a = alpha.load()
-    m = mask.load()
-    o = out.load()
-    w, h = alpha.size
-    for y in range(h):
-        for x in range(w):
-            o[x, y] = a[x, y] * m[x, y] // 255
-    return out
+def draw_store_icon():
+    """96x96 artwork centered on a transparent 128x128 canvas."""
+    canvas = Image.new("RGBA", (STORE_ICON_CANVAS, STORE_ICON_CANVAS), (0, 0, 0, 0))
+    artwork = draw_icon(STORE_ICON_ARTWORK, ICON_SAMPLE, EMPHASIZED_INDEX)
+    canvas.alpha_composite(artwork, (STORE_ICON_PADDING, STORE_ICON_PADDING))
+    return canvas
 
 
-def font(size):
-    try:
-        return ImageFont.truetype(FONT_PATH, size)
-    except OSError:
-        return ImageFont.load_default()
-
-
-def make_screenshot():
-    img = Image.new("RGB", SHOT_SIZE, SHOT_BG)
-    d = ImageDraw.Draw(img)
-
-    title_font = font(44)
-    sub_font = font(22)
-    tip_font = font(24)
-
-    d.text((80, 70), "Rate Limits for Claude", font=title_font, fill=TEXT_DARK)
-    d.text(
-        (80, 130),
-        "Your 5-hour, 7-day, and Fable usage as toolbar bars, colored by pace. No click needed.",
-        font=sub_font,
-        fill=TEXT_MUTED,
+def make_screenshot(src_name, scale, resample):
+    src = Image.open(SRC_DIR / src_name).convert("RGB")
+    scaled = src.resize((src.width * scale, src.height * scale), resample)
+    if scaled.width > SHOT_SIZE[0] or scaled.height > SHOT_SIZE[1]:
+        raise ValueError(f"{src_name} at {scale}x is {scaled.size}, larger than {SHOT_SIZE}")
+    canvas = Image.new("RGB", SHOT_SIZE, SHOT_BG)
+    x = (SHOT_SIZE[0] - scaled.width) // 2
+    y = (SHOT_SIZE[1] - scaled.height) // 2
+    canvas.paste(scaled, (x, y))
+    ImageDraw.Draw(canvas).rectangle(
+        [x - 1, y - 1, x + scaled.width, y + scaled.height], outline=SHOT_BORDER, width=1
     )
-
-    # Fake toolbar strip with the icon in it.
-    strip_top, strip_h = 230, 300
-    d.rectangle([80, strip_top, 1200, strip_top + strip_h], fill=TOOLBAR_BG, outline=TOOLBAR_BORDER, width=2)
-    icon = draw_icon(ICON_RENDER_SIZE, SHOT_SAMPLE, EMPHASIZED_INDEX)
-    icon_x = 140
-    icon_y = strip_top + (strip_h - ICON_RENDER_SIZE) // 2
-    img.paste(icon, (icon_x, icon_y), icon)
-
-    # Tooltip box to the right of the icon.
-    pad = 24
-    line_gap = 10
-    line_h = tip_font.getbbox("Ag")[3] + line_gap
-    box_w = max(d.textlength(line, font=tip_font) for line in SHOT_TOOLTIP) + 2 * pad
-    box_h = line_h * len(SHOT_TOOLTIP) + 2 * pad - line_gap
-    box_x = icon_x + ICON_RENDER_SIZE + 60
-    box_y = strip_top + (strip_h - box_h) // 2
-    d.rounded_rectangle(
-        [box_x, box_y, box_x + box_w, box_y + box_h], radius=8, fill=TOOLTIP_BG, outline=TOOLTIP_BORDER, width=2
-    )
-    y = box_y + pad
-    for line in SHOT_TOOLTIP:
-        d.text((box_x + pad, y), line, font=tip_font, fill=TEXT_DARK)
-        y += line_h
-
-    # Legend.
-    legend_y = strip_top + strip_h + 60
-    legend = [
-        (COLOR_UNDER_PACE, "Blue: under pace - weekly quota will go unused at reset"),
-        (COLOR_ON_PACE, "Green: on pace"),
-        (COLOR_OVER_PACE, "Amber: over pace - you will run out before the reset"),
-    ]
-    for rgb, text in legend:
-        d.rounded_rectangle([80, legend_y, 80 + 28, legend_y + 28], radius=5, fill=rgb)
-        d.text((124, legend_y - 2), text, font=sub_font, fill=TEXT_DARK)
-        legend_y += 48
-
-    d.text(
-        (80, SHOT_SIZE[1] - 70),
-        "Unofficial. Not affiliated with Anthropic. Reads usage from your existing claude.ai login; nothing leaves your browser.",
-        font=font(18),
-        fill=TEXT_MUTED,
-    )
-    return img
+    return canvas
 
 
 def main():
     ICONS_DIR.mkdir(exist_ok=True)
-    for size in (16, 48, 128):
+    for size in FULL_BLEED_ICON_SIZES:
         draw_icon(size, ICON_SAMPLE, EMPHASIZED_INDEX).save(ICONS_DIR / f"icon{size}.png")
-    make_screenshot().save(STORE_DIR / "screenshot-1280x800.png")
-    print("wrote icons/icon{16,48,128}.png and store/screenshot-1280x800.png")
+    draw_store_icon().save(ICONS_DIR / f"icon{STORE_ICON_CANVAS}.png")
+    print(f"wrote icons/icon{{{','.join(map(str, FULL_BLEED_ICON_SIZES))},{STORE_ICON_CANVAS}}}.png")
+    for src_name, out_name, scale, resample in SCREENSHOTS:
+        make_screenshot(src_name, scale, resample).save(STORE_DIR / out_name)
+        print(f"wrote store/{out_name}")
 
 
 if __name__ == "__main__":
